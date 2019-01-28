@@ -1,0 +1,60 @@
+dist: trusty
+language: c
+
+# Prevents tag commits from being built using safelisting
+# TRAVIS_BRANCH env variable is not visible here
+branches:
+  only:
+    - gettext4vim
+
+# TRAVIS_TAG should be different from TRAVIS_BRANCH.
+# Otherwise above safelisting will be broken.
+env:
+  global:
+    - secure: PjPO5nJoIiDvakrwwzeYDVdhSlSyy6IKYNDFW1Ys12qJ+t0Y7bGBd7PgbSaDSzTp0UY/FmXtMsQAMU+3O4N7Bc7EGNyFwFQZ+dZdRlAGkKdUO1bWNob4B6IadsofTcYVcdSt0lYp//U6pGpqqJQd8gW7t1p7jUDzOZDnSY+XkNQwE6mmlBV3O3ZXrW3/xY6vjf4EE4Zx8rZvCP+iW1Bb/BTscdfol308paXXiQUH4ZuHZwSEZtjsgDnO9/yBhpnU3Sh6tvmLvTBhATqizYi5jcVqIZyjcxmXN1zQCypE2DpgpYdcLuXHPPSuw8wmPLYccBeth+ZOpIuAqjU9QUewRqrkDAO4jTuZZ2Q6LkmnWl4kgK4gHwbYew5r31D+NhgWeeDXNURzEcNhvUvOCVroFvmiaADIsHNwbTuKHdotBkXVvIbU41Tw3+7YJBsL7h8S9ZGeQ4zfvT8EnuN0O/tgzJzEAT2JBIqXDgfyqeMBiTkVjp0Yw/tBvdaHsSiW6y44dIzbqPaCbbRKxk7LRGIBjhlHZ4IWsXG9txTU1rs2qoyMHrNTodvAHM8tPq5QwIaYG3etoPe/yo1hfMEOJ7fqlEKEawGy/xvV+Msg/fp4ADFVYsK/Sindz2hzWfAmGQ4ZkLrts9bbw11vbqpQGZq5LP1etwTECsoQ9EbejNdMLb0=
+    - BUILD_NAME="gettext and iconv DLLs"
+    - TRAVIS_TAG="$TRAVIS_BRANCH.build"
+  matrix:
+    - PLATFORM=x86   MXE_TARGETS=i686-w64-mingw32.shared
+    - PLATFORM=amd64 MXE_TARGETS=x86_64-w64-mingw32.shared
+
+install:
+  - git clone https://github.com/mxe/mxe
+  - sudo apt-get -qq update
+  - sudo apt-get install -y autopoint gperf intltool p7zip-full lzip
+
+before_script:
+  - chmod +x clean_release.sh
+  - if [ $MXE_TARGETS == "i686-w64-mingw32.shared" ]; then ./clean_release.sh; fi
+
+script:
+  - chmod +x check_cache.sh
+  - mv check_cache.sh mxe/
+  - travis_wait 120 sleep infinity &
+  - pushd mxe
+  - ./check_cache.sh
+  - make MXE_TARGETS=$MXE_TARGETS gettext -j 4
+  - popd
+
+before_deploy:
+  - mkdir -p artifacts/
+  - cp mxe/usr/$MXE_TARGETS/bin/libintl-8.dll artifacts/
+  - mxe/tools/copydlldeps.sh -c -d artifacts -S "mxe/usr/$MXE_TARGETS/bin" -F artifacts
+  - TARGET_VER=`grep -e "\\$(PKG)_VERSION.*:=" mxe/src/gettext.mk | awk -F":=" '{print $2}' | sed -e 's/[ ]*//g'`
+  - pushd artifacts
+  - tar cJvf "$TRAVIS_BRANCH-$TARGET_VER.$PLATFORM.tar.xz" *
+  - popd
+
+deploy:
+  provider: releases
+  api_key: "$GITHUB_TOKEN"
+  name: "$BUILD_NAME"
+  tag_name: "$TRAVIS_TAG"
+  target_commitish: "$TRAVIS_BRANCH"
+  file_glob: true
+  file: artifacts/*.xz
+  skip_cleanup: true
+  overwrite: true
+  on:
+    branch: "$TRAVIS_BRANCH"
+
