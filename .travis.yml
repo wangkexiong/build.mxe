@@ -1,0 +1,89 @@
+dist: trusty
+language: c
+
+# Prevents tag commits from being built using safelisting
+# TRAVIS_BRANCH env variable is not visible here
+branches:
+  only:
+    - gvim
+
+# TRAVIS_TAG should be different from TRAVIS_BRANCH.
+# Otherwise above safelisting will be broken.
+env:
+  global:
+    - secure: PjPO5nJoIiDvakrwwzeYDVdhSlSyy6IKYNDFW1Ys12qJ+t0Y7bGBd7PgbSaDSzTp0UY/FmXtMsQAMU+3O4N7Bc7EGNyFwFQZ+dZdRlAGkKdUO1bWNob4B6IadsofTcYVcdSt0lYp//U6pGpqqJQd8gW7t1p7jUDzOZDnSY+XkNQwE6mmlBV3O3ZXrW3/xY6vjf4EE4Zx8rZvCP+iW1Bb/BTscdfol308paXXiQUH4ZuHZwSEZtjsgDnO9/yBhpnU3Sh6tvmLvTBhATqizYi5jcVqIZyjcxmXN1zQCypE2DpgpYdcLuXHPPSuw8wmPLYccBeth+ZOpIuAqjU9QUewRqrkDAO4jTuZZ2Q6LkmnWl4kgK4gHwbYew5r31D+NhgWeeDXNURzEcNhvUvOCVroFvmiaADIsHNwbTuKHdotBkXVvIbU41Tw3+7YJBsL7h8S9ZGeQ4zfvT8EnuN0O/tgzJzEAT2JBIqXDgfyqeMBiTkVjp0Yw/tBvdaHsSiW6y44dIzbqPaCbbRKxk7LRGIBjhlHZ4IWsXG9txTU1rs2qoyMHrNTodvAHM8tPq5QwIaYG3etoPe/yo1hfMEOJ7fqlEKEawGy/xvV+Msg/fp4ADFVYsK/Sindz2hzWfAmGQ4ZkLrts9bbw11vbqpQGZq5LP1etwTECsoQ9EbejNdMLb0=
+    - BUILD_NAME="gvim mingw build"
+    - TRAVIS_TAG="$TRAVIS_BRANCH.build"
+
+install:
+  - git clone https://github.com/mxe/mxe
+  - git clone https://github.com/vim/vim
+  - sudo apt-get -qq update
+  - sudo apt-get install -y autopoint gperf intltool p7zip-full lzip upx-ucl wine
+  - curl -fsSL -o python-2.7.15.msi https://www.python.org/ftp/python/2.7.15/python-2.7.15.msi
+  - curl -fsSL -o python-2.7.15.amd64.msi https://www.python.org/ftp/python/2.7.15/python-2.7.15.amd64.msi
+  - curl -fsSL -o nsis.build.tar.xz https://github.com/$TRAVIS_REPO_SLUG/releases/download/nsis.build/nsis.build.tar.xz
+  - mkdir -p nsis/tools/{x86,amd64}
+  - curl -fsSL -o nsis/tools/x86/diff.exe    https://github.com/wangkexiong/diff.msbuild/releases/download/vc9.x86/diff.exe
+  - curl -fsSL -o nsis/tools/amd64/diff.exe  https://github.com/wangkexiong/diff.msbuild/releases/download/vc9.amd64/diff.exe
+  - curl -fsSL -o nsis/tools/x86/ctags.exe   https://github.com/wangkexiong/exuberant.ctags/releases/download/vc9.x86/ctags.exe
+  - curl -fsSL -o nsis/tools/amd64/ctags.exe https://github.com/wangkexiong/exuberant.ctags/releases/download/vc9.amd64/ctags.exe
+  - wine msiexec /a python-2.7.15.msi /qb TARGETDIR=C:\python27-x86 > /dev/null 2>&1
+  - wine msiexec /a python-2.7.15.amd64.msi /qb TARGETDIR=C:\python27 > /dev/null 2>&1
+
+before_script:
+  - mkdir nsis.build && mv nsis.build.tar.xz nsis.build
+  - pushd nsis.build
+  - tar xJvf nsis.build.tar.xz > /dev/null && rm -rf nsis.build.tar.xz
+  - export NSISDIR=$PWD/share/nsis
+  - popd
+  - export PYTHON32_HOME=$HOME/.wine/drive_c/python27-x86
+  - export PYTHON64_HOME=$HOME/.wine/drive_c/python27
+
+script:
+  - travis_wait 120 sleep infinity &
+  - mkdir artifacts
+  - export RELEASE_HOME=$PWD/artifacts
+  - chmod +x check_cache.sh
+  - mv check_cache.sh mxe/
+  - pushd mxe
+  - MXE_TARGETS=i686-w64-mingw32.shared   ./check_cache.sh
+  - MXE_TARGETS=x86_64-w64-mingw32.shared ./check_cache.sh
+  - make MXE_TARGETS='i686-w64-mingw32.shared x86_64-w64-mingw32.shared' gettext -j 4
+  - export MXE_HOME=$PWD
+  - export PATH=$MXE_HOME/usr/bin:$PATH
+  - popd
+  - pushd script
+  - chmod +x build_mingw.sh
+  - ./build_mingw.sh
+  - popd
+  - pushd nsis
+  - mkdir -p tools/{x86,amd64,gettext32,gettext64}
+  - cp $PYTHON32_HOME/python27.dll tools/x86/python27.dll
+  - cp $PYTHON64_HOME/python27.dll tools/amd64/python27.dll
+  - cp $MXE_HOME/usr/i686-w64-mingw32.shared/bin/libintl-*.dll   tools/gettext32/.
+  - $MXE_HOME/tools/copydlldeps.sh -c -d tools/gettext32 -s $MXE_HOME/usr/i686-w64-mingw32.shared/bin -F tools/gettext32
+  - cp $MXE_HOME/usr/x86_64-w64-mingw32.shared/bin/libintl-*.dll tools/gettext64/.
+  - $MXE_HOME/tools/copydlldeps.sh -c -d tools/gettext64 -s $MXE_HOME/usr/x86_64-w64-mingw32.shared/bin -F tools/gettext64
+  - $NSISDIR/../../bin/makensis gvim.nsi
+  - if [ -f gvim*.exe ]; then mv gvim*.exe $RELEASE_HOME; READY2DEPLOY=True; fi
+  - popd
+
+before_deploy:
+  - chmod +x clean_release.sh
+  - ./clean_release.sh
+
+deploy:
+  provider: releases
+  api_key: "$GITHUB_TOKEN"
+  name: "$BUILD_NAME"
+  tag_name: "$TRAVIS_TAG"
+  target_commitish: "$TRAVIS_BRANCH"
+  file_glob: true
+  file: artifacts/*.exe
+  skip_cleanup: true
+  overwrite: true
+  on:
+    branch: "$TRAVIS_BRANCH"
+    condition: $READY2DEPLOY = True
+
