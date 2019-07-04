@@ -1,0 +1,64 @@
+dist: trusty
+language: c
+
+# Prevents tag commits from being built using safelisting
+# TRAVIS_BRANCH env variable is not visible here
+branches:
+  only:
+    - ffmpeg
+
+# TRAVIS_TAG should be different from TRAVIS_BRANCH.
+# Otherwise above safelisting will be broken.
+env:
+  global:
+    - secure: PjPO5nJoIiDvakrwwzeYDVdhSlSyy6IKYNDFW1Ys12qJ+t0Y7bGBd7PgbSaDSzTp0UY/FmXtMsQAMU+3O4N7Bc7EGNyFwFQZ+dZdRlAGkKdUO1bWNob4B6IadsofTcYVcdSt0lYp//U6pGpqqJQd8gW7t1p7jUDzOZDnSY+XkNQwE6mmlBV3O3ZXrW3/xY6vjf4EE4Zx8rZvCP+iW1Bb/BTscdfol308paXXiQUH4ZuHZwSEZtjsgDnO9/yBhpnU3Sh6tvmLvTBhATqizYi5jcVqIZyjcxmXN1zQCypE2DpgpYdcLuXHPPSuw8wmPLYccBeth+ZOpIuAqjU9QUewRqrkDAO4jTuZZ2Q6LkmnWl4kgK4gHwbYew5r31D+NhgWeeDXNURzEcNhvUvOCVroFvmiaADIsHNwbTuKHdotBkXVvIbU41Tw3+7YJBsL7h8S9ZGeQ4zfvT8EnuN0O/tgzJzEAT2JBIqXDgfyqeMBiTkVjp0Yw/tBvdaHsSiW6y44dIzbqPaCbbRKxk7LRGIBjhlHZ4IWsXG9txTU1rs2qoyMHrNTodvAHM8tPq5QwIaYG3etoPe/yo1hfMEOJ7fqlEKEawGy/xvV+Msg/fp4ADFVYsK/Sindz2hzWfAmGQ4ZkLrts9bbw11vbqpQGZq5LP1etwTECsoQ9EbejNdMLb0=
+    - BUILD_NAME="ffmpeg.build"
+    - TRAVIS_TAG="$TRAVIS_BRANCH.build"
+  matrix:
+    - PLATFORM=x86   MXE_TARGETS=i686-w64-mingw32.shared
+    - PLATFORM=x86   MXE_TARGETS=i686-w64-mingw32.static
+    - PLATFORM=x86_64 MXE_TARGETS=x86_64-w64-mingw32.shared
+    - PLATFORM=x86_64 MXE_TARGETS=x86_64-w64-mingw32.static
+
+install:
+  - git clone https://github.com/mxe/mxe
+  - git clone https://github.com/FFmpeg/FFmpeg
+  - sudo apt-get -qq update
+  - sudo apt-get install -y autopoint gperf intltool p7zip-full lzip
+
+before_script:
+  - chmod +x clean_release.sh
+  - if [ $MXE_TARGETS == "i686-w64-mingw32.shared" ]; then ./clean_release.sh; fi
+
+script:
+  - chmod +x check_cache.sh
+  - mv check_cache.sh mxe/
+  - travis_wait 120 sleep infinity &
+  - pushd mxe
+  - ./check_cache.sh
+  - make MXE_TARGETS=$MXE_TARGETS yasm sdl2 gnutls libass libbluray libcaca lame opus speex theora vidstab vo-amrwbenc vorbis libvpx x264 xvidcore -j 4
+  - popd
+  - pushd FFmpeg
+  - git checkout `git describe --tags --abbrev=0`
+  - ./configure --prefix=$PWD/../artifacts/ --cross-prefix=$MXE_TARGETS- --arch=$PLATFORM --target-os=mingw32 --x86asmexe=$MXE_TARGETS-yasm --disable-debug --enable-sdl2 --enable-gpl --enable-version3 --enable-avisynth --enable-bzlib --enable-fontconfig --enable-gnutls --enable-iconv --enable-libass --enable-libbluray --enable-libcaca --enable-libfreetype --enable-libmp3lame --enable-libopus --enable-libspeex --enable-libtheora --enable-libvidstab --enable-libvo-amrwbenc --enable-libvorbis --enable-libvpx --enable-libx264 --enable-libxvid --enable-zlib
+  - make install
+  - popd
+
+before_deploy:
+  - pushd artifacts
+  - tar cJvf "ffmpeg.$MXETARGETS.tar.xz" *
+  - popd
+
+deploy:
+  provider: releases
+  api_key: "$GITHUB_TOKEN"
+  name: "$BUILD_NAME"
+  tag_name: "$TRAVIS_TAG"
+  target_commitish: "$TRAVIS_BRANCH"
+  file_glob: true
+  file: artifacts/ffmpeg*.xz
+  skip_cleanup: true
+  overwrite: true
+  on:
+    branch: "$TRAVIS_BRANCH"
+
