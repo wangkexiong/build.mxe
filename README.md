@@ -5,10 +5,10 @@
 
 ## 1. MXE cc core latest build
 
-+ **i686-w64-mingw32.shared Last Build in: Tue, 29 Jan 2019 04:02:47 +0000**
-+ **i686-w64-mingw32.static Last Build in: Tue, 29 Jan 2019 04:10:48 +0000**
-+ **x86_64-w64-mingw32.shared Last Build in: Tue, 29 Jan 2019 04:12:50 +0000**
-+ **x86_64-w64-mingw32.static Last Build in: Tue, 29 Jan 2019 04:13:34 +0000**
++ **i686-w64-mingw32.shared Last Build in: Sat, 10 Apr 2021 17:26:07 +0000**
++ **i686-w64-mingw32.static Last Build in: Sat, 10 Apr 2021 17:26:02 +0000**
++ **x86_64-w64-mingw32.shared Last Build in: Sat, 10 Apr 2021 17:29:06 +0000**
++ **x86_64-w64-mingw32.static Last Build in: Sat, 10 Apr 2021 17:26:52 +0000**
 
 ## 2. What's MXE?
 MXE is a version of MinGW that has been compiled on Linux and
